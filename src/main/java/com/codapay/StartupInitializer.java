@@ -1,23 +1,22 @@
 package com.codapay;
 
-import com.codapay.api.ApiPayload;
-import lombok.Getter;
-import lombok.Setter;
 import org.json.JSONObject;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
 @Component
 public class StartupInitializer {
-    @Value("${router.address}")
-    private String routerAddr;
+    @Autowired
+    private RouterConfiguration routerConfiguration;
+
+    @Autowired
+    private ServerConfiguration serverConfiguration;
 
     @EventListener(ApplicationReadyEvent.class)
     public void startupInit() {
@@ -28,19 +27,39 @@ public class StartupInitializer {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
 
+        String serverAddr = "http://" + serverConfiguration.getHost()
+                + ":"
+                + serverConfiguration.getPort()
+                + "/application";
+
         JSONObject registerJSONObject = new JSONObject();
-        registerJSONObject.put("ipAddr", "http://localhost:8081/application");
-        registerJSONObject.put("instanceId", "15");
+        registerJSONObject.put("ipAddr", serverAddr);
+        registerJSONObject.put("instanceId", serverConfiguration.getInstanceId());
 
         HttpEntity<String> request =
                 new HttpEntity<String>(registerJSONObject.toString(), headers);
 
-        String routerRegisterAddr = routerAddr + "/route/register";
+        String routerRegisterAddr = "http://" + routerConfiguration.getHost()
+                + ":"
+                + routerConfiguration.getPort()
+                + "/route/register";
 
         System.out.println("registering to " + routerRegisterAddr);
 
         String response = restTemplate.postForObject(routerRegisterAddr, request, String.class);
         System.out.println("Register to router: " + response);
+    }
+
+    public void exitHook() {
+        String routerRemoveAddr = "http://" + routerConfiguration.getHost()
+                + ":"
+                + routerConfiguration.getPort()
+                + "/route/" + serverConfiguration.getInstanceId();
+
+        System.out.println("detaching from router..");
+
+        RestTemplate restTemplate = new RestTemplate();
+        restTemplate.delete(routerRemoveAddr);
     }
 }
 
